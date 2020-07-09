@@ -1,0 +1,25 @@
+---
+- hosts: windows
+
+  tasks:
+    - name: Ensure 7-Zip is installed via Chocolatey
+      win_chocolatey:
+        name: 7zip
+        state: present
+
+    - name: Install IIS (Web-Server and Web-Common-Http)
+      win_feature:
+        name:
+          - Web-Server
+          - Web-Common-Http
+        state: present
+      register: iis_install
+
+    - name: Reboot if installing Web-Server feature requires it
+      win_reboot:
+      when: iis_install.reboot_required
+
+    - name: Copy demo.html
+      win_copy:
+        src: demo.html
+        dest: C:\inetpub\wwwroot\demo.html

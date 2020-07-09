@@ -1,0 +1,34 @@
+#
+# Dynamic Inventory for Azure
+#
+# https://docs.ansible.com/ansible/latest/plugins/inventory/azure_rm.html for documentation
+# Remember to install required python packages with e.g.
+# pip3 install ansible[azure]
+#
+# To test the dynamic inventory, you can run
+# ansible-inventory --graph -i inventory.azure_rm.yaml
+#
+
+plugin: azure_rm
+
+#
+# Include `rg-dev` resource group for VM's (you can list many)
+
+include_vm_resource_groups:
+  - rg-dev
+  - rg-cat
+
+#
+# Authentication automagically (could be cli, credential_file, env, or msi)
+auth_source: auto
+
+#
+# There are number of ways to build Ansible host groups automatically from e.g. tags or vm names
+# See the documentation for some examples
+
+#
+# In this example we have set ansible_group tag on each vm that has the vm type (e.g. linux or windows)
+# This tag is used to build host groups
+keyed_groups:
+  - key: tags.ansible_group | default('none')
+    separator: ""

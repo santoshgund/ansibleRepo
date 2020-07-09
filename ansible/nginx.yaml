@@ -1,0 +1,8 @@
+---
+- hosts: linux
+
+  tasks:
+    - name: Install nginx
+      apt: name=nginx state=latest
+      become: yes
+

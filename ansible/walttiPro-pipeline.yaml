@@ -1,0 +1,413 @@
+# ASP.NET
+# Build and test ASP.NET projects.
+# Add steps that publish symbols, save build artifacts, deploy, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/apps/aspnet/build-aspnet-4
+
+trigger:
+- develop
+
+# pool:
+#   name: Azure Pipelines
+#   vmImage: 'vs2017-win2016'
+#   demands:
+#   - msbuild
+#   - visualstudio
+#   - vstest
+
+stages:
+- stage: build
+  displayName: Build
+  pool:
+    name: Azure Pipelines
+    vmImage: 'vs2017-win2016'
+    demands:
+    - msbuild
+    - visualstudio
+    - vstest
+  jobs:
+  - job: build_dotnet_solution
+    displayName: build dotnet solution
+    
+    variables:
+    - name: STATE_KEY
+      value: 'tfstate.dev'
+    - name: TFPATH
+      value: '$(build.artifactstagingdirectory)/Terraform'
+    - name: STORAGE_ACCOUNT
+      value: 'walttiproterraform'
+    - name: SUBSCRIPTION_NAME
+      value: 'WalttiProServiceConnection-All'
+    # - group: 'Global-Variable-Group'
+    - name: Parameters.solution
+      value: '**/*.sln'
+    - name: BuildPlatform
+      value: 'Any CPU'
+    - name: buildConfiguration
+      value: 'Release'
+    - name: Parameters.ArtifactName
+      value: 'Drop'
+      
+    steps:
+
+      # - task: MSBuild@1
+      #   inputs:
+      #     solution: 'WalttiProServices/WalttiProServices.sln'
+      #     clean: true
+      #     restoreNugetPackages: true
+      #     logProjectEvents: true
+
+      # - task: VSTest@2
+      #   inputs:
+      #     testSelector: 'testAssemblies'
+      #     testAssemblyVer2: |
+      #       **\*test*.dll
+      #       !**\*TestAdapter.dll
+      #       !**\obj\**
+      #     platform: '$(BuildPlatform)'
+      #     configuration: '$(BuildConfiguration)'
+      #     searchFolder: '$(System.DefaultWorkingDirectory)'
+      - task: CopyFiles@2
+        inputs:
+          SourceFolder: Terraform
+          Contents: '**'
+          TargetFolder: '$(build.artifactstagingdirectory)'
+          CleanTargetFolder: true
+
+      
+
+      - task: PublishBuildArtifacts@1
+        inputs:
+          PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+          ArtifactName: 'drop'
+          publishLocation: 'Container'
+        condition: succeededOrFailed()
+    
+      - task: PowerShell@2
+        displayName: 'Degug parameters'
+        inputs:
+          targetType: Inline
+          script: |
+            Write-Host "Build.ArtifactStagingDirectory" : "$(Build.ArtifactStagingDirectory)"
+            Write-Host "System.DefaultWorkingDirectory" : "$(System.DefaultWorkingDirectory)"
+            Write-Host "System.ArtifactsDirectory" : "$(System.ArtifactsDirectory)"
+            Write-Host "Pipeline.Workspace" : "$(Pipeline.Workspace)"
+            Write-Host "System.ArtifactsDirectory" : "$(System.ArtifactsDirectory)"
+            Write-Host "agent.builddirectory" : "$(agent.builddirectory)"
+
+- stage: ProvisionInfrastructure
+  displayName: Provision Infra
+  pool:
+    name: Azure Pipelines
+    vmImage: 'vs2017-win2016'
+
+  jobs:
+  - job: ProvisionInfrastructure
+    displayName: Provision Infra
+    
+      
+    steps:
+      - task: DownloadBuildArtifacts@0
+        inputs:
+          buildType: 'current'
+          downloadType: 'single'
+          artifactName: 'drop'
+          downloadPath: '$(Build.ArtifactStagingDirectory)'
+
+      - task: TerraformInstaller@0
+        displayName: 'Install Terraform'
+        inputs:
+          terraformVersion: 'latest'
+
+      - task: Terraform@2
+        displayName: 'Terraform init'
+        inputs:
+          TemplatePath: '$(Build.ArtifactStagingDirectory)/drop'
+          Arguments: 'init'
+          InstallTerraform: false
+          UseAzureSub: true
+          ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+          ConnectedServiceNameARM: 'WalttiProServiceConnection-All'
+          ManageState: true
+          SpecifyStorageAccount: true
+          StorageAccountResourceGroup: 'rg-terraform'
+          StorageAccountRM: 'walttiproterraform'
+          StorageContainerName: 'terraform'
+
+      # - task: Terraform@2
+      #   displayName: 'Terraform new workspace Cat'
+      #   inputs:
+      #     TemplatePath: '$(Build.ArtifactStagingDirectory)/drop'
+      #     Arguments: 'workspace new cat'
+      #     InstallTerraform: false
+      #     UseAzureSub: true
+      #     ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+      #     ConnectedServiceNameARM: 'WalttiProServiceConnection-All'
+      #     ManageState: false
+      #     StorageAccountResourceGroup: 'rg-terraform'
+      #     StorageAccountRM: 'walttiproterraform'
+      #     StorageContainerName: 'terraform'
+
+      - task: Terraform@2
+        displayName: 'Terraform select workspace'
+        inputs:
+          TemplatePath: '$(Build.ArtifactStagingDirectory)/drop'
+          Arguments: 'workspace select cat'
+          InstallTerraform: false
+          UseAzureSub: true
+          ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+          ConnectedServiceNameARM: 'WalttiProServiceConnection-All'
+          ManageState: true
+          SpecifyStorageAccount: true
+          StorageAccountResourceGroup: 'rg-terraform'
+          StorageAccountRM: 'walttiproterraform'
+          StorageContainerName: 'terraform'
+
+      - task: Terraform@2
+        displayName: 'Terraform validate'
+        inputs:
+          TemplatePath: '$(Build.ArtifactStagingDirectory)/drop'
+          Arguments: 'validate'
+          InstallTerraform: false
+          UseAzureSub: false
+
+
+      - task: Terraform@2
+        displayName: 'Terraform plan'
+        inputs:
+          TemplatePath: '$(Build.ArtifactStagingDirectory)/drop'
+          Arguments: 'plan'
+          InstallTerraform: false
+          UseAzureSub: true
+          ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+          ConnectedServiceNameARM: 'WalttiProServiceConnection-All'
+          ManageState: true
+          SpecifyStorageAccount: true
+          StorageAccountResourceGroup: 'rg-terraform'
+          StorageAccountRM: 'walttiproterraform'
+          StorageContainerName: 'terraform'
+    
+      - task: TerraformCLI@0
+        displayName: 'Terraform apply'
+        inputs:
+          command: 'apply'
+          workingDirectory: '$(Build.ArtifactStagingDirectory)/drop'
+          environmentServiceName: 'WalttiProServiceConnection-All'
+      - task: terraform-outputs@0
+        displayName: 'Terraform output'
+        inputs:
+          workingDirectory: '$(Build.ArtifactStagingDirectory)/drop'
+          mapSensitiveOutputsAsSecrets: false
+
+      - task: PowerShell@2
+        displayName: 'Output IP Address'
+        inputs:
+          targetType: Inline
+          script: |
+            Write-Host "$(public_ip_address)"
+
+      - task: PublishPipelineArtifact@1
+        displayName: 'Publish pipeline artifacts'
+        inputs:
+          targetPath: '$(Pipeline.Workspace)'
+          artifact: 'variables'
+          publishLocation: 'pipeline'
+
+- stage: Ansible
+  displayName: Ansible 
+  # condition: and(succeeded(), eq(variables['build.sourceBranch'], 'refs/heads/master'))
+  jobs:
+  - deployment:
+    displayName: Ansible
+    pool:
+      name: Azure Pipelines
+      vmImage: 'ubuntu-latest'
+
+    environment: Dev
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - download: none
+
+            - task: DownloadBuildArtifacts@0
+              displayName: 'Download build artifacts'
+              inputs:
+                buildType: 'current'
+                downloadType: 'single'
+                artifactName: 'drop'
+                downloadPath: '$(Build.ArtifactStagingDirectory)'
+
+            - task: DownloadPipelineArtifact@2
+              displayName: 'Download Pipeline artifacts'
+              inputs:
+                buildType: 'current'
+                artifactName: 'variables'
+                targetPath: '$(Pipeline.Workspace)'
+
+            - task: Bash@3
+              displayName: "Read IP_Address"
+              inputs:
+                targetType: 'inline'
+                script: |
+                  IP_Address=$(cat $(Pipeline.Workspace)/Da1/variables/local)
+                  echo "##vso[task.setvariable variable=IP_Address]$IP_Address"
+                workingDirectory: '$(Pipeline.Workspace)'
+
+            - task: Bash@3
+              displayName: "Print IP_Address"
+              inputs:
+                targetType: 'inline'
+                script: 'echo "$(IP_Address)"'
+                workingDirectory: '$(Pipeline.Workspace)'
+            
+            - task: Bash@3
+              displayName: "Install pywinrm"
+              inputs:
+                targetType: 'inline'
+                script: 'pip install --ignore-installed "pywinrm>=0.2.2"'
+            
+            - task: Bash@3
+              displayName: "Install ansible[azure]"
+              inputs:
+                targetType: 'inline'
+                script: 'pip install ansible[azure]'
+
+            
+            # - task: Bash@3
+            #   inputs:
+            #     targetType: 'inline'
+            #     script: 'ansible -m ping tag_my_devops_ansible_slave -i dynamic_inventory_azure_rm.yml'
+            #     workingDirectory: '$(Build.ArtifactStagingDirectory)/drop/ansible'
+
+            - task: Bash@3
+              inputs:
+                targetType: 'inline'
+                script: 'ansible-inventory --graph -i inventory.azure_rm.yaml'
+                workingDirectory: '$(Build.ArtifactStagingDirectory)/drop/ansible'
+
+            
+            - task: Bash@3
+              inputs:
+                targetType: 'inline'
+                script: 'ansible-playbook -i $(Build.ArtifactStagingDirectory)/drop/ansible/inventory.azure_rm.yaml -l 13.95.11.17 $(Build.ArtifactStagingDirectory)/drop/ansible/windows.yaml'
+
+
+            # - task: Ansible@0
+            #   displayName: Run Playbook"
+            #   inputs:
+            #     ansibleInterface: 'agentMachine'
+            #     playbookPathOnAgentMachine: '$(Build.ArtifactStagingDirectory)/drop/ansible/windows.yaml'
+            #     inventoriesAgentMachine: 'inlineContent'
+            #     inventoryInlineDynamicAgentMachine: true
+            #     inventoryInlineContentAgentMachine: 'ansible-inventory --graph -i inventory.azure_rm.yaml'
+
+            # - task: Ansible@0
+            #   inputs:
+            #     ansibleInterface: 'agentMachine'
+            #     playbookPathOnAgentMachine: '$(Build.ArtifactStagingDirectory)/drop/ansible/windows.yaml'
+            #     inventoriesAgentMachine: 'inlineContent'
+            #     inventoryInlineContentAgentMachine: |
+            #       windows:
+            #         hosts:
+            #           # "$(IP_Address)":
+            #           #   ansible_user: ojala
+            #           #   ansible_password: FOOfoo#123
+            #           #   ansible_port: 5986
+            #           #   ansible_connection: winrm
+            #           #   ansible_winrm_server_cert_validation: ignore
+                      
+            #     failOnStdErr: false
+
+            # - task: Bash@3
+            #   inputs:
+            #     targetType: 'inline'
+            #     script: 'pip install wheel'
+            #     #workingDirectory: '$(Build.ArtifactStagingDirectory)/drop/ansible'
+
+            # - task: Bash@3
+            #   inputs:
+            #     targetType: 'inline'
+            #     script: 'pip install pywinrm'
+            #     #workingDirectory: '$(Build.ArtifactStagingDirectory)/drop/ansible'
+           
+            # - task: Ansible@0
+            #   inputs:
+            #       ansibleInterface: 'agentMachine'
+            #       playbookPathOnAgentMachine: '$(Build.ArtifactStagingDirectory)/drop/ansible/windows.yaml'
+            #       inventoriesAgentMachine: 'inlineContent'
+            #       inventoryInlineContentAgentMachine: |
+            #         [windows] 
+            #         40.68.173.197 ansible_user=ojala ansible_password=FOOfoo#123 ansible_port=5986 ansible_connection=winrm ansible_winrm_server_cert_validation=ignore
+           
+            # - task: PowerShell@2
+            #   inputs:
+            #     filePath: '$(Build.ArtifactStagingDirectory)/drop/ansible/ConfigureRemotingForAnsible.ps1'
+            # - task: Bash@3
+            #   inputs:
+            #     targetType: 'inline'
+            #     # script: 'ansible -i $(Build.ArtifactStagingDirectory)/drop/ansible/inventory windows -m win_ping -e ansible_connection=winrm -e ansible_user=ojala -e ansible_password=FOOfoo#123 -e ansible_winrm_transport=basic -e ansible_winrm_server_cert_validation=ignore'
+            #     script: 'ansible-playbook -i $(Build.ArtifactStagingDirectory)/drop/ansible/inventory1 windows -m win_ping'
+
+
+
+
+
+
+
+          # Working
+
+
+            # - task: Bash@3
+            #   inputs:
+            #     targetType: 'inline'
+            #     script: 'pip install --ignore-installed "pywinrm>=0.2.2"'
+
+            # - task: Bash@3
+            #   inputs:
+            #     targetType: 'inline'
+            #     script: 'ansible-playbook -i $(Build.ArtifactStagingDirectory)/drop/ansible/inventory1 $(Build.ArtifactStagingDirectory)/drop/ansible/windows.yaml'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            # - task: Ansible@0
+            #   inputs:
+            #     ansibleInterface: 'agentMachine'
+            #     playbookPathOnAgentMachine: '$(Build.ArtifactStagingDirectory)/drop/ansible/windows.yaml'
+            #     inventoriesAgentMachine: 'file'
+            #     inventoryFileOnAgentMachine: '$(Build.ArtifactStagingDirectory)/drop/ansible/inventory1'
+            
+            # - task: AzureCLI@2
+            #   displayName: 'Azure CLI'
+            #   inputs:
+            #     azureSubscription: 'WalttiProServiceConnection-All'
+            #     addSpnToEnvironment: true
+            #     scriptType: 'bash'
+            #     scriptLocation: 'inlineScript'
+            #     inlineScript: |
+            #       echo "##vso[task.setvariable variable=ARM_SUBSCRIPTION_ID]$(az account show --query="id" -o tsv)"
+            #       echo "##vso[task.setvariable variable=ARM_CLIENT_ID]${servicePrincipalId}"
+            #       echo "##vso[task.setvariable variable=ARM_CLIENT_SECRET]${servicePrincipalKey}"
+            #       echo "##vso[task.setvariable variable=ARM_TENANT_ID]${tenantId}"
+            
+            # - script: pip install ansible[azure]
+            #   displayName: 'Install Ansible and the Azure modules'
+
+            # # - script: ansible-playbook -i inv site.yml
+            # #   displayName: 'Run Ansible Playbook'
+            # #   env:
+            # #     AZURE_CLIENT_ID: $(ARM_CLIENT_ID)
+            # #     AZURE_SECRET: $(ARM_CLIENT_SECRET)
+            # #     AZURE_TENANT: $(ARM_TENANT_ID)
+            # #     AZURE_SUBSCRIPTION_ID: $(ARM_SUBSCRIPTION_ID)
