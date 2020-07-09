@@ -22,6 +22,13 @@ include_vm_resource_groups:
 # Authentication automagically (could be cli, credential_file, env, or msi)
 auth_source: auto
 
+client_id : 8fd3b9bc-0f15-4ea5-9352-cc1dee2641fc
+
+secret : 2<ALiH3<{OnQt+k[wF]#^Lb@loL=|!;J
+
+subscription_id : 479674dc-2b4f-4f86-a1d6-cc7f74e93e82
+
+tenant : cbede638-a3d9-459f-8f4e-24ced73b4e5e
 #
 # There are number of ways to build Ansible host groups automatically from e.g. tags or vm names
 # See the documentation for some examples
