@@ -15,12 +15,11 @@ plugin: azure_rm
 # Include `rg-dev` resource group for VM's (you can list many)
 
 include_vm_resource_groups:
-  - rg-dev
   - rg-cat
 
 #
 # Authentication automagically (could be cli, credential_file, env, or msi)
-auth_source: auto
+auth_source: env
 
 #
 # There are number of ways to build Ansible host groups automatically from e.g. tags or vm names

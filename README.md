@@ -39,5 +39,3 @@ Ansible playbooks have been implemented as flat, single playbooks and inventory 
 Ansible inventory is a static file and in this type of case it should be dynamically built.
 
 One could also combine use of Terraform and Ansible with e.g. running Terraform as Ansible module.
-"# ansibleRepo" 
-"# ansibleRepo" 

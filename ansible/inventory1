@@ -1,5 +1,5 @@
 [windows]
-13.81.253.221
+40.68.173.197
 [windows:vars]
 ansible_user=ojala
 ansible_password=FOOfoo#123
